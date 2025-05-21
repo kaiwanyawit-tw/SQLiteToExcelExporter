@@ -26,7 +26,9 @@ namespace SQLiteToExcelExporter
                 Console.WriteLine($"\nExport will be saved to: {outputPath}");
 
                 var exportService = new ExcelExportService(context);
-                await exportService.ExportAllTablesToExcel(outputPath);
+                //await exportService.ExportAllTablesToExcel(outputPath);
+                // Example usage
+                await exportService.ExportAllTablesToSingleExcel(outputPath);
 
                 Console.WriteLine("\nExport completed successfully!");
                 Console.WriteLine($"Files are located at: {outputPath}");

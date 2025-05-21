@@ -55,12 +55,12 @@ namespace SQLiteToExcelExporter.Services
                 foreach (var item in data)
                 {
                     IRow dataRow = sheet.CreateRow(rowIndex);
-                    
+
                     for (int i = 0; i < properties.Count; i++)
                     {
                         var cell = dataRow.CreateCell(i);
                         var value = properties[i].GetValue(item);
-                        
+
                         if (value == null)
                         {
                             cell.SetCellValue(string.Empty);
@@ -72,7 +72,7 @@ namespace SQLiteToExcelExporter.Services
                         else if (value is decimal decimalValue)
                         {
                             cell.SetCellValue((double)decimalValue);
-                            
+
                             // Apply currency format for price columns
                             if (properties[i].Name.Contains("Price") || properties[i].Name.Contains("Amount"))
                             {
@@ -99,7 +99,7 @@ namespace SQLiteToExcelExporter.Services
                             cell.SetCellValue(value.ToString());
                         }
                     }
-                    
+
                     rowIndex++;
                 }
 
@@ -149,6 +149,145 @@ namespace SQLiteToExcelExporter.Services
             catch (Exception ex)
             {
                 Console.WriteLine($"Error exporting all tables: {ex.Message}");
+                throw;
+            }
+        }
+
+        public async Task AddTableToWorkbook<T>(IWorkbook workbook, string tableName) where T : class
+        {
+            try
+            {
+                Console.WriteLine($"Adding table {tableName} as new sheet...");
+
+                // Create a new sheet
+                ISheet sheet = workbook.CreateSheet(tableName);
+
+                // Get the data
+                var data = await _context.Set<T>().ToListAsync();
+                if (data.Count == 0)
+                {
+                    Console.WriteLine($"No data found in table {tableName}.");
+                    return;
+                }
+
+                // Create header row
+                IRow headerRow = sheet.CreateRow(0);
+                var properties = typeof(T).GetProperties()
+                    .Where(p => p.PropertyType.IsSimpleType())
+                    .ToList();
+
+                for (int i = 0; i < properties.Count; i++)
+                {
+                    var cell = headerRow.CreateCell(i);
+                    var headerStyle = workbook.CreateCellStyle();
+                    var headerFont = workbook.CreateFont();
+                    headerFont.IsBold = true;
+                    headerStyle.SetFont(headerFont);
+                    cell.CellStyle = headerStyle;
+                    cell.SetCellValue(properties[i].Name);
+                }
+
+                // Create data rows
+                int rowIndex = 1;
+                foreach (var item in data)
+                {
+                    IRow dataRow = sheet.CreateRow(rowIndex);
+
+                    for (int i = 0; i < properties.Count; i++)
+                    {
+                        var cell = dataRow.CreateCell(i);
+                        var value = properties[i].GetValue(item);
+
+                        if (value == null)
+                        {
+                            cell.SetCellValue(string.Empty);
+                        }
+                        else if (value is DateTime dateTime)
+                        {
+                            cell.SetCellValue(dateTime.ToString("yyyy-MM-dd HH:mm:ss"));
+                        }
+                        else if (value is decimal decimalValue)
+                        {
+                            cell.SetCellValue((double)decimalValue);
+
+                            // Apply currency format for price columns
+                            if (properties[i].Name.Contains("Price") || properties[i].Name.Contains("Amount"))
+                            {
+                                var style = workbook.CreateCellStyle();
+                                var format = workbook.CreateDataFormat();
+                                style.DataFormat = format.GetFormat("$#,##0.00");
+                                cell.CellStyle = style;
+                            }
+                        }
+                        else if (value is double doubleValue)
+                        {
+                            cell.SetCellValue(doubleValue);
+                        }
+                        else if (value is int intValue)
+                        {
+                            cell.SetCellValue(intValue);
+                        }
+                        else if (value is bool boolValue)
+                        {
+                            cell.SetCellValue(boolValue);
+                        }
+                        else
+                        {
+                            cell.SetCellValue(value.ToString());
+                        }
+                    }
+
+                    rowIndex++;
+                }
+
+                // Auto-size columns
+                for (int i = 0; i < properties.Count; i++)
+                {
+                    sheet.AutoSizeColumn(i);
+                }
+
+                Console.WriteLine($"Sheet {tableName} added successfully.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error adding table {tableName} to workbook: {ex.Message}");
+                throw;
+            }
+        }
+
+        public async Task ExportAllTablesToSingleExcel(string outputPath)
+        {
+            try
+            {
+                Console.WriteLine("Starting export of all tables to single Excel file...");
+
+                // Create output directory if it doesn't exist
+                if (!Directory.Exists(outputPath))
+                {
+                    Directory.CreateDirectory(outputPath);
+                    Console.WriteLine($"Created output directory: {outputPath}");
+                }
+
+                // Create a new workbook
+                IWorkbook workbook = new XSSFWorkbook();
+
+                // Add each table as a new sheet
+                await AddTableToWorkbook<Models.Product>(workbook, "Products");
+                await AddTableToWorkbook<Models.Category>(workbook, "Categories");
+                await AddTableToWorkbook<Models.Customer>(workbook, "Customers");
+                await AddTableToWorkbook<Models.Order>(workbook, "Orders");
+                await AddTableToWorkbook<Models.OrderItem>(workbook, "OrderItems");
+
+                // Save the workbook
+                string filePath = Path.Combine(outputPath, $"AllTables_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx");
+                using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write);
+                workbook.Write(fs);
+
+                Console.WriteLine($"All tables exported successfully to: {filePath}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error exporting all tables to single Excel file: {ex.Message}");
                 throw;
             }
         }
